@@ -1,0 +1,17 @@
+---
+title: "d607P1"
+output: html_document
+date: "2026-02-20"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Approach 
+This assignment is asking for a R markdown file that can process the given dataset in text file: player's name, state, total points, pre-rating, average pre chess rating of oppoinments and create a csv file to record the result. 
+
+Read and parse the data might be an challenge. Given text file has two lines for each player, seperate by dash lines and vertial dashlines, so we need to remove those separator lines before process each palyer's data. Will need to extract name, total points, state and rating, pre-rating, opponent numbers.
+
+To calculate average opponent rating, a function will need be able to lookup opponment's stats through opponment number. In the end write.cxv function can be used to convert result in csv deliverable. 
+ 

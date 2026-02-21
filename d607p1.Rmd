@@ -15,3 +15,36 @@ Read and parse the data might be an challenge. Given text file has two lines for
 
 To calculate average opponent rating, a function will need be able to lookup opponment's stats through opponment number. In the end write.cxv function can be used to convert result in csv deliverable. 
  
+Load and Read Data
+
+```{r}
+library(tidyverse)
+library(stringr)
+
+file_path <- "tournamentinfo.txt" 
+
+data <- readLines(file_path, warn = FALSE)
+
+#search pattern inside the txt file locate separator - dash lines only leave info data.
+separator_indices <- grep("^-+", data) 
+data_lines <- data[-separator_indices]
+
+# Remove potential empty lines
+data_lines <- data_lines[data_lines != ""]
+data_lines <- trimws(data_lines)
+
+# use grep function again to locate header
+header_indices <- grep("Pair|Player Name|USCF ID|Num", data_lines, ignore.case = TRUE)
+data_lines <- data_lines[-header_indices]
+
+head(data_lines,6)
+```
+
+Create datafram
+
+```{r}
+
+
+  
+```
+

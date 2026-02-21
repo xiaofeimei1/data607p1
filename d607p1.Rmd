@@ -9,13 +9,16 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 Approach 
-This assignment is asking for a R markdown file that can process the given dataset in text file: player's name, state, total points, pre-rating, average pre chess rating of oppoinments and create a csv file to record the result. 
+This assignment is asking for a R markdown file that can process the given data set in text file: player's name, state, total points, pre-rating, average pre-rating of opponents and create a csv file to record the result. 
 
-Read and parse the data might be an challenge. Given text file has two lines for each player, seperate by dash lines and vertial dashlines, so we need to remove those separator lines before process each palyer's data. Will need to extract name, total points, state and rating, pre-rating, opponent numbers.
+Read and parse the data might be an challenge. Given text file is formated two lines for each player, separate by dash lines and vertical dash lines, so we need to remove those separator lines before process each player's data. Will need to extract name, total points, state and rating, pre-rating, opponent numbers.
 
-To calculate average opponent rating, a function will need be able to lookup opponment's stats through opponment number. In the end write.cxv function can be used to convert result in csv deliverable. 
+To calculate average opponent rating, a function will need be able to lockup opponent's stats through opponent number. In the end write.csv function can be used to convert result in csv deliverable.
+
+ 
  
 Load and Read Data
+A sample of data set is saved in github repository. Grep() function can be used to identify where separator dash lines are, which can be removed once being identified. Similary we can remove header, so all the info left are the ones we need. 
 
 ```{r}
 library(tidyverse)
@@ -23,7 +26,7 @@ library(stringr)
 
 file_path <- "tournamentinfo.txt" 
 
-data <- readLines(file_path, warn = FALSE)
+data <- readLines(file_path, warn = FALSE)  
 
 #search pattern inside the txt file locate separator - dash lines only leave info data.
 separator_indices <- grep("^-+", data) 
@@ -40,11 +43,193 @@ data_lines <- data_lines[-header_indices]
 head(data_lines,6)
 ```
 
-Create datafram
+Create data frame to save all opponents. Since each player are referenced by their player numbers, which can be used to locate  pregame rating info. Player info such as name, states, opponment numbers can be extract and saved into player data frame. 
+
+```{r}
+players <- data.frame()
+
+# parsing in pairs, 2 lines each
+for (i in seq(1, length(data_lines), by = 2)) {
+  if (i + 1 <= length(data_lines)) {
+    line1 <- data_lines[i]    # Player info 
+    line2 <- data_lines[i + 1] # State/Rating 
+    
+    # first element - player ID
+    parts1 <- strsplit(line1, "\\|")[[1]]
+    parts2 <- strsplit(line2, "\\|")[[1]]
+  
+      player_name <- trimws(parts1[2])
+      total_points <- trimws(parts1[3])
+      
+      # opponent numbers 
+    opponents <- c()
+    for (j in 4:length(parts1)) {  
+      result <- trimws(parts1[j])
+      
+      if (result == "" || result == " ") {
+        next
+      }
+      
+      opp_num <- str_extract(result, "\\d+")
+      if (!is.na(opp_num)) {
+        opponents <- c(opponents, as.numeric(opp_num))
+      }
+     
+    }
+      # state 
+      state_info <- trimws(parts2[1])
+      state <- substr(state_info, 1, 2)
+      # pre-rating
+     rating_text <- parts2[2]
+
+        pattern <- "R:\\s*(\\d+)"
+        match <- regexpr(pattern, rating_text)
+        if (match != -1) {
+          pre_rating <- as.numeric(regmatches(rating_text, regexec(pattern, rating_text))[[1]][2])
+        } else {
+          pre_rating <- NA
+        }
+      
+        player_data <- data.frame(
+          Name = player_name,
+          State = state,
+          Points = as.numeric(total_points),
+          PreRating = pre_rating,
+          stringsAsFactors = FALSE 
+        )
+      
+    #save all opponents to calculate average pre-game rating. adding rows
+      player_data$Opponents <- list(opponents)
+      players <- rbind(players, player_data)
+    }
+  }
+
+
+
+```
+
+
+Player data frame has player's name and all parsed opponent numbers. We still need to get opponent pre-ratings and calculate average. Few functions will be created, to get opponent rating, get average, and sapply() can be used to apply all created function to each player. This will provide us with final result. 
 
 ```{r}
 
+# Function to calculate average opponent rating, pair player number to prerating
+rating_lookup <- setNames(players$PreRating, 1:nrow(players))
 
+calc_avg_opponent_rating <- function(opponent_numbers, rating_lookup) {
+  if (length(opponent_numbers) == 0) {
+    return(NA)
+  }
   
+  # ratings for opponents
+  opponent_ratings <- rating_lookup[as.character(opponent_numbers)]
+  # Remove NA values
+  opponent_ratings <- opponent_ratings[!is.na(opponent_ratings)]
+  #get average
+  if (length(opponent_ratings) > 0) {
+    return(mean(opponent_ratings))
+  } else {
+    return(NA)
+  }
+}
+
+# sapply function to apply all 
+players$AvgOppRating <- sapply(players$Opponents, 
+                               calc_avg_opponent_rating, 
+                               rating_lookup = rating_lookup)
+
+# Round to whole 
+players$AvgOppRating <- round(players$AvgOppRating, 0)
+
+
+final_data <- players[, c("Name", "State", "Points", "PreRating", "AvgOppRating")]
+
+# sprintf to format show one decimal place
+final_data$Points <- sprintf("%.1f", final_data$Points)
+
+
 ```
 
+
+Let's do some verification, first I used Gary Hua, which has info exactly matches with the number from assignment. I then  did the verification for Mike Nikitin, with stats as follow. I choose Mike because he had 2 games he didn't play, and few of his opponent had pre-rating that include "P" which we should ignore and only use rating before P, which make Mike's case more challenging.  Result below correctly listed his opponents and average opponent score. Everything looks good, next step would be save all results into csv file. 
+
+16 | MIKE NIKITIN                    |4.0  |D  10|W  15|H    |W  39|L   2|W  36|U    |
+MI | 10295068 / R: 1604   ->1613     |N:3  |B    |W    |     |B    |W    |B    |     |
+
+```{r}
+
+# Verify Gary Hua
+gary_hua <- final_data[grepl("GARY HUA", final_data$Name, ignore.case = TRUE), ]
+
+if (nrow(gary_hua) > 0) {
+  gary_hua <- gary_hua[1, ]  
+  gary_index <- grep("^GARY HUA$", players$Name, ignore.case = TRUE)[1]
+  
+  if (!is.na(gary_index)) {
+    # Extract opponents
+    gary_opponents <- players$Opponents[[gary_index]]
+    
+   
+    opp_ratings <- c()
+    for (opp in gary_opponents) {
+      opp_rating <- rating_lookup[as.character(opp)]
+      
+      if (is.character(opp_rating)) {
+        opp_rating <- as.numeric(gsub("P.*$", "", opp_rating))
+      }
+      
+      opp_ratings <- c(opp_ratings, opp_rating)
+    }
+    
+    avg_calc <- mean(opp_ratings)
+    avg_rounded <- round(avg_calc, 0)
+    
+    cat("PLAYER INFORMATION:\n",
+    "  Name:       ", gary_hua$Name, "\n",
+    "  State:      ", gary_hua$State, "\n",
+    "  Points:     ", gary_hua$Points, "\n",
+    "  Pre-Rating: ", gary_hua$PreRating, "\n",
+    "  Avg Opp Rating:", gary_hua$AvgOppRating, "\n\n", sep="")
+  }
+}
+
+mike <- final_data[grepl("MIKE NIKITIN", final_data$Name, ignore.case = TRUE), ]
+
+if (nrow(mike) > 0) {
+  mike <- mike[1, ]  
+  
+  mike_index <- grep("MIKE NIKITIN", players$Name, ignore.case = TRUE)[1]
+  
+  if (!is.na(mike_index)) {
+    mike_opponents <- players$Opponents[[mike_index]]
+    opp_ratings <- c()
+    for (opp in mike_opponents) {
+      opp_rating <- rating_lookup[as.character(opp)]
+      if (is.character(opp_rating)) {
+        opp_rating <- as.numeric(gsub("P.*$", "", opp_rating))
+      }
+      
+      opp_ratings <- c(opp_ratings, opp_rating)
+    }
+    
+    avg_calc <- mean(opp_ratings)
+    avg_rounded <- round(avg_calc, 0)
+    
+    cat("PLAYER INFORMATION:\n",
+        "  Name:        ", mike$Name, "\n",
+        "  State:       ", mike$State, "\n",
+        "  Points:      ", mike$Points, "\n",
+        "  Pre-Rating:  ", mike$PreRating, "\n",
+        "  Avg Opp Rating: ", mike$AvgOppRating, "\n\n", sep="")
+    
+    cat("OPPONENT INFORMATION:\n",
+        "  Opponents played: ", paste(mike_opponents, collapse = ", "), "\n",
+        "  Opponent ratings: ", paste(opp_ratings, collapse = ", "), "\n\n", sep="")
+  }
+}
+
+write.csv(final_data, "chess_results.csv", row.names = FALSE, quote = TRUE)
+print(head(final_data, 10))
+```
+Summary
+I think overall some challenging parts in this assignment were to correctly extract player and opponent information, then look through appointment' data to calculate average rating. There were some variation in the format as well such as not all players completed 7 games, and some opponents' rating include P rating which we need to ignore. 
